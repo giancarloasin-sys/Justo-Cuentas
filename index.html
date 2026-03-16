@@ -155,7 +155,7 @@
         </div>
         <div class="split-grid project-grid">
           <article class="card simulator-hero">
-            <div class="section-title-row compact"><div><h3>Simulador protagonista de órdenes incrementales</h3><p class="mini-note">El proyecto suma órdenes incrementales sobre la base actual del e-commerce. El objetivo es dimensionar capacidad total, no solo el delta.</p></div></div>
+            <div class="section-title-row compact"><div><h3>Simulador protagonista de órdenes incrementales</h3><p class="mini-note">El proyecto suma órdenes incrementales sobre la base actual del e-commerce. El objetivo es dimensionar la capacidad total y el refuerzo adicional necesario sobre la base histórica.</p></div></div>
             <div class="sim-grid">
               <div><label>Usuarios activos</label><input id="simUsers" type="number"></div>
               <div><label>% audiencia expuesta</label><input id="simExposure" type="number" step="0.1"></div>
@@ -164,12 +164,9 @@
               <div><label>% mix delivery</label><input id="simDeliveryMix" type="number" step="0.1"></div>
               <div><label>Órdenes por driver por día</label><input id="simOrdersDriver" type="number" step="0.1"></div>
               <div><label>Días operativos al mes</label><input id="simDays" type="number"></div>
-              <div><label>Meta total de órdenes</label><input id="simTarget" type="number" value="7500"></div>
-              <div><label>Drivers instalados por día</label><input id="simInstalledDrivers" type="number" step="0.1"></div>
+              <div><label>Meta incremental inDrive / mes</label><input id="simTarget" type="number" value="7500"></div>
               <div><label>Colchón operativo (%)</label><input id="simBuffer" type="number" step="0.1"></div>
               <div><label>Factor de pico / fricción</label><input id="simPeakFactor" type="number" step="0.05"></div>
-              <div><label>% share almuerzo</label><input id="simLunchShare" type="number" step="0.1"></div>
-              <div><label>% share cena</label><input id="simDinnerShare" type="number" step="0.1"></div>
             </div>
             <div id="simulatorOutput" class="sim-output"></div>
             <div id="capacityTargets" class="executive-strip"></div>
@@ -179,15 +176,15 @@
           </article>
           <div class="project-side-stack">
             <article class="card chart-card">
-              <div class="section-title-row compact"><div><h3>Zonas prioritarias de activación</h3><p class="mini-note">Se priorizan donde coinciden base delivery, señal de proyecto y readiness operativa.</p></div></div>
+              <div class="section-title-row compact"><div><h3>Zonas prioritarias de activación</h3><p class="mini-note">Se priorizan donde coinciden base delivery, señal del proyecto y readiness operativa.</p></div></div>
               <canvas id="priorityChart" class="chart-canvas small"></canvas>
             </article>
             <article class="card chart-card">
-              <div class="section-title-row compact"><div><h3>Capacidad requerida vs instalada</h3><p class="mini-note">Drivers activos promedio por día para sostener base + incremental.</p></div></div>
+              <div class="section-title-row compact"><div><h3>Capacidad histórica vs refuerzo sugerido</h3><p class="mini-note">Compara base sugerida, extra inDrive y drivers únicos observados históricamente.</p></div></div>
               <canvas id="capacityChart" class="chart-canvas small"></canvas>
             </article>
             <article class="card chart-card">
-              <div class="section-title-row compact"><div><h3>Staffing recomendado por franja</h3><p class="mini-note">Distribuye drivers activos/día entre mañana, almuerzo, tarde y cena según el perfil configurado.</p></div></div>
+              <div class="section-title-row compact"><div><h3>Staffing recomendado por franja</h3><p class="mini-note">Distribuye base sugerida y refuerzo inDrive entre mañana, almuerzo, tarde y cena usando shares históricos.</p></div></div>
               <canvas id="daypartChart" class="chart-canvas small"></canvas>
             </article>
             <article class="card chart-card">

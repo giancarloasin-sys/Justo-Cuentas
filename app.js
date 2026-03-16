@@ -143,11 +143,9 @@ function hydrateHero() {
   $('simDeliveryMix').value = 70;
   $('simOrdersDriver').value = m.defaultOrdersPerDriverDay || 8;
   $('simDays').value = m.defaultWorkingDays || 30;
-  $('simInstalledDrivers').value = Math.max(1, Math.round((m.defaultInstalledDriversPerDay || m.defaultObservedDriversPerDay || 0) || 24));
-  if ($('simBuffer')) $('simBuffer').value = m.defaultOperationalBufferPct || 20;
-  if ($('simPeakFactor')) $('simPeakFactor').value = m.defaultPeakFactor || 1.25;
-  $('simLunchShare').value = m.defaultLunchSharePct || 35;
-  $('simDinnerShare').value = m.defaultDinnerSharePct || 30;
+  if ($('simTarget')) $('simTarget').value = m.defaultIncrementalTarget || 7500;
+  if ($('simBuffer')) $('simBuffer').value = m.defaultOperationalBufferPct || 25;
+  if ($('simPeakFactor')) $('simPeakFactor').value = m.defaultPeakFactor || 1.3;
 }
 
 function initControls() {
@@ -159,7 +157,7 @@ function initControls() {
     $('distanceMin').addEventListener('input', () => { state.filters.distanceMin = numOrNull($('distanceMin').value); render(); });
     $('distanceMax').addEventListener('input', () => { state.filters.distanceMax = numOrNull($('distanceMax').value); render(); });
     $('resetFiltersBtn').addEventListener('click', resetFilters);
-    ['simUsers','simExposure','simCtr','simConversion','simDeliveryMix','simOrdersDriver','simDays','simTarget','simInstalledDrivers','simBuffer','simPeakFactor','simLunchShare','simDinnerShare'].forEach((id) => $(id).addEventListener('input', renderSimulator));
+    ['simUsers','simExposure','simCtr','simConversion','simDeliveryMix','simOrdersDriver','simDays','simTarget','simBuffer','simPeakFactor'].forEach((id) => { const node = $(id); if (node) node.addEventListener('input', () => render()); });
     ['toggleStores','toggleDemand','togglePriority','toggleNoCoverage'].forEach((id) => $(id).addEventListener('change', updateMapLayerVisibility));
     window.__tamboControlsBound = true;
   }
@@ -227,6 +225,7 @@ function onFilterChange(e) {
   const set = new Set(state.filters[key] || []);
   if (e.target.checked) set.add(value); else set.delete(value);
   state.filters[key] = [...set];
+  initFilters();
   render();
 }
 
@@ -468,7 +467,7 @@ function renderKpis(summary) {
     { label: 'Ciclo típico', value: minutes(summary.cycleP50), sub: `P50 recalculado · P90 ${minutes(summary.cycleP90)}` },
     { label: 'Distancia promedio', value: km(summary.avgDistanceKm), sub: 'Se recalcula con el filtro de distancia' },
     { label: 'Locales con delivery observado', value: number(summary.activeLocalsDeliveryObserved), sub: `${number(summary.activeLocalsDeliveryConfigured)} configurados para delivery y ${number(summary.activeLocals)} activos totales` },
-    { label: 'Drivers activos', value: number(summary.activeDrivers), sub: 'Promedio mensual observado' },
+    { label: 'Drivers únicos activos', value: number(summary.activeDrivers), sub: 'Promedio mensual de repartidores distintos observados' },
   ];
   $('kpiGrid').innerHTML = cards.map((card) => `
     <article class="kpi-card">
@@ -519,7 +518,7 @@ function renderExecutive(summary, rows, points) {
     <div class="executive-card accent-dark">
       <span class="eyebrow-mini">Lectura recomendada</span>
       <strong>${escapeHtml(readiness)}</strong>
-      <span>${bestZone ? `Primera zona a revisar: ${escapeHtml(bestZone.name)}.` : 'Ajusta filtros para ver prioridad por zona.'} Gap actual a la meta: ${number(gapToTarget)} órdenes/mes.</span>
+      <span>${bestZone ? `Primera zona a revisar: ${escapeHtml(bestZone.name)}.` : 'Ajusta filtros para ver prioridad por zona.'} Gap a la meta incremental: ${number(Math.max(target - incrementalOrders, 0))} órdenes/mes.</span>
     </div>`;
 
   const zoneRows = grouped(rows.filter((r) => r.typeSelection !== 'pickup'), 'zone').sort((a,b) => (b.projectOrders || b.orders) - (a.projectOrders || a.orders));
@@ -544,9 +543,9 @@ function renderExecutive(summary, rows, points) {
         <span>${best ? `${number(best.projectOrders || best.orders)} órdenes y ${number(best.locals)} locales.` : 'Sin señal suficiente.'}${second ? ` Segunda zona: ${escapeHtml(second.name)}.` : ''}</span>
       </div>
       <div class="executive-card accent-dark">
-        <span class="eyebrow-mini">Meta mensual</span>
+        <span class="eyebrow-mini">Meta incremental inDrive</span>
         <strong>${number(target)}</strong>
-        <span>El foco operativo es llegar con capacidad para el volumen total: base actual + incremento capturado por el proyecto.</span>
+        <span>El foco es capturar ${number(target)} órdenes incrementales y preparar capacidad para base actual + incremento total del proyecto.</span>
       </div>`;
   }
 }
@@ -982,17 +981,16 @@ function renderSimulator(rows, summary) {
   const ordersDriver = Math.max(Number($('simOrdersDriver').value) || 1, 0.1);
   const days = Math.max(Number($('simDays').value) || 30, 1);
   const target = Number($('simTarget').value) || 7500;
-  const installedDrivers = Number($('simInstalledDrivers').value) || 0;
   const bufferPct = (Number($('simBuffer').value) || 0) / 100;
   const peakFactor = Math.max(Number($('simPeakFactor').value) || 1, 1);
-  const lunchSharePct = Number($('simLunchShare').value) || 35;
-  const dinnerSharePct = Number($('simDinnerShare').value) || 30;
 
   const baseTotalMonth = summary.avgOrdersMonth || 0;
   const baseDeliveryMonth = safeDivision(summary.deliveryOrders, Math.max(summary.months || 1, 1));
   const basePickupMonth = safeDivision(summary.pickupOrders, Math.max(summary.months || 1, 1));
   const baseDriversDailyAvg = safeDivision(baseDeliveryMonth, ordersDriver * days);
   const baseDriverDaysMonth = safeDivision(baseDeliveryMonth, ordersDriver);
+  const historicalUniqueDriversMonth = summary.activeDrivers || 0;
+  const avgActiveDaysPerUniqueDriver = safeDivision(baseDriverDaysMonth, Math.max(historicalUniqueDriversMonth, 1));
 
   const incrementalOrders = users * exposurePct * ctrPct * conversionPct;
   const incrementalDelivery = incrementalOrders * deliveryMixPct;
@@ -1003,17 +1001,24 @@ function renderSimulator(rows, summary) {
   const totalOrdersMonth = baseTotalMonth + incrementalOrders;
   const totalDeliveryMonth = baseDeliveryMonth + incrementalDelivery;
   const totalDriversDailyAvg = baseDriversDailyAvg + incrementalDriversDailyAvg;
+  const baseSuggestedDriversDaily = baseDriversDailyAvg * (1 + bufferPct) * peakFactor;
   const recommendedDriversDaily = totalDriversDailyAvg * (1 + bufferPct) * peakFactor;
+  const incrementalSuggestedDriversDaily = Math.max(recommendedDriversDaily - baseSuggestedDriversDaily, 0);
   const totalDriverDaysMonth = baseDriverDaysMonth + incrementalDriverDaysMonth;
+  const baseSuggestedDriverDaysMonth = baseDriverDaysMonth * (1 + bufferPct) * peakFactor;
   const recommendedDriverDaysMonth = totalDriverDaysMonth * (1 + bufferPct) * peakFactor;
+  const incrementalSuggestedDriverDaysMonth = Math.max(recommendedDriverDaysMonth - baseSuggestedDriverDaysMonth, 0);
   const totalDeliveryDaily = safeDivision(totalDeliveryMonth, days);
+  const suggestedUniqueDriversMonth = safeDivision(recommendedDriverDaysMonth, Math.max(avgActiveDaysPerUniqueDriver, 1e-9));
+  const additionalUniqueDriversMonth = Math.max(safeDivision(incrementalSuggestedDriverDaysMonth, Math.max(avgActiveDaysPerUniqueDriver, 1e-9)), 0);
 
-  const additionalNeededForTarget = Math.max(target - baseTotalMonth, 0);
-  const targetDeliveryNeeded = additionalNeededForTarget * deliveryMixPct;
-  const requiredExposureForTarget = safeDivision(additionalNeededForTarget, Math.max(users * ctrPct * conversionPct, 1));
+  const additionalNeededForTarget = Math.max(target - incrementalOrders, 0);
+  const targetDeliveryNeeded = target * deliveryMixPct;
+  const requiredExposureForTarget = safeDivision(target, Math.max(users * ctrPct * conversionPct, 1));
   const targetDriversDailyAvg = baseDriversDailyAvg + safeDivision(targetDeliveryNeeded, ordersDriver * days);
   const targetRecommendedDriversDaily = targetDriversDailyAvg * (1 + bufferPct) * peakFactor;
   const targetDriverDays = (baseDriverDaysMonth + safeDivision(targetDeliveryNeeded, ordersDriver)) * (1 + bufferPct) * peakFactor;
+  const targetAdditionalDriversDaily = Math.max(targetRecommendedDriversDaily - baseSuggestedDriversDaily, 0);
 
   const prepTarget = 12;
   const waitTarget = 3;
@@ -1039,26 +1044,26 @@ function renderSimulator(rows, summary) {
     const baseDrivers = safeDivision(z.deliveryMonth, ordersDriver * days) * (1 + bufferPct) * peakFactor;
     const incDrivers = safeDivision(incDelivery, ordersDriver * days) * (1 + bufferPct) * peakFactor;
     const totalDrivers = baseDrivers + incDrivers;
-    const installedZoneDrivers = zoneBuckets.slice(0, 6).reduce((acc, cur) => acc + 1, 0) ? installedDrivers * share : installedDrivers / Math.max(zoneBuckets.slice(0, 6).length, 1);
-    const gapDrivers = totalDrivers - installedZoneDrivers;
+    const gapDrivers = incDrivers;
     const recPrep = totalDrivers > 3 ? Math.min(prepTarget, 10) : prepTarget;
-    return { name: z.name, share, incOrders, incDelivery, baseDrivers, incDrivers, totalDrivers, installedZoneDrivers, gapDrivers, cycleP50: z.cycleP50, signal: z.signal, recPrep };
+    return { name: z.name, share, incOrders, incDelivery, baseDrivers, incDrivers, totalDrivers, gapDrivers, cycleP50: z.cycleP50, signal: z.signal, recPrep };
   });
 
-  const dayparts = buildDayparts(lunchSharePct, dinnerSharePct);
+  const dayparts = buildDayparts();
   const daypartRows = dayparts.map((dp) => ({
     ...dp,
     baseOrders: safeDivision(baseDeliveryMonth, days) * dp.share,
     incrementalOrders: safeDivision(incrementalDelivery, days) * dp.share,
     totalOrders: totalDeliveryDaily * dp.share,
     requiredDrivers: recommendedDriversDaily * dp.share,
-    installedDrivers: installedDrivers * dp.share,
-    gapDrivers: (recommendedDriversDaily - installedDrivers) * dp.share,
+    baseSuggestedDrivers: baseSuggestedDriversDaily * dp.share,
+    extraSuggestedDrivers: incrementalSuggestedDriversDaily * dp.share,
+    gapDrivers: incrementalSuggestedDriversDaily * dp.share,
   }));
   const peakDaypart = [...daypartRows].sort((a,b) => b.requiredDrivers - a.requiredDrivers)[0];
   const worstGapDaypart = [...daypartRows].sort((a,b) => b.gapDrivers - a.gapDrivers)[0];
-  const capacityGap = recommendedDriversDaily - installedDrivers;
-  const capacityGapPct = safeDivision(capacityGap, Math.max(installedDrivers, 1));
+  const capacityGap = incrementalSuggestedDriversDaily;
+  const capacityGapPct = safeDivision(capacityGap, Math.max(baseSuggestedDriversDaily, 1));
 
   const zoneAlerts = zoneCards.slice(0, 4).map((z) => {
     const tone = z.cycleP50 > 42 || z.gapDrivers > 1.8 ? 'bad' : z.cycleP50 > 35 || z.gapDrivers > 0.7 ? 'warn' : 'good';
@@ -1066,7 +1071,7 @@ function renderSimulator(rows, summary) {
     return {
       tone,
       title: `${z.name}: ${title}`,
-      detail: `Base ${number(z.baseDrivers,1)} drivers/día · incremento ${number(z.incDrivers,1)} · instalado ${number(z.installedZoneDrivers,1)} · gap ${z.gapDrivers > 0 ? '+' : ''}${number(z.gapDrivers,1)} · ciclo ${minutes(z.cycleP50)}.`
+      detail: `Base sugerida ${number(z.baseDrivers,1)} drivers/día · extra por inDrive ${number(z.incDrivers,1)} · total ${number(z.totalDrivers,1)} · ciclo ${minutes(z.cycleP50)}.`
     };
   });
   const localAlerts = rows
@@ -1082,8 +1087,8 @@ function renderSimulator(rows, summary) {
     tone: capacityGap > 0 ? (capacityGapPct > 0.2 ? 'bad' : 'warn') : 'good',
     title: capacityGap > 0 ? 'Capacidad instalada insuficiente' : 'Capacidad instalada suficiente',
     detail: capacityGap > 0
-      ? `Faltan ${number(Math.abs(capacityGap),1)} drivers activos/día para sostener base + incremental con los supuestos actuales.`
-      : `La capacidad instalada cubre el escenario actual con un colchón de ${number(Math.abs(capacityGap),1)} drivers/día.`
+      ? `Se recomienda sumar ${number(Math.abs(capacityGap),1)} drivers/día adicionales sobre la base histórica para sostener el incremental configurado.`
+      : `La base histórica absorbería el escenario actual sin necesidad de refuerzo adicional.`
   };
   const allAlerts = [globalAlert, ...zoneAlerts, ...localAlerts].slice(0, 6);
 
@@ -1107,12 +1112,12 @@ function renderSimulator(rows, summary) {
       <div class="sim-stat">
         <span>Drivers sugeridos / día</span>
         <strong>${number(recommendedDriversDaily, 1)}</strong>
-        <small>${number(totalDriversDailyAvg, 1)} promedio equivalente · buffer ${(bufferPct*100).toFixed(0)}% · factor pico ${peakFactor.toFixed(2)}x</small>
+        <small>${number(baseSuggestedDriversDaily, 1)} base sugerida + ${number(incrementalSuggestedDriversDaily,1)} extra por inDrive · buffer ${(bufferPct*100).toFixed(0)}% · factor pico ${peakFactor.toFixed(2)}x</small>
       </div>
     </div>
     <p>Con la configuración actual, el proyecto aportaría <strong>${number(incrementalOrders)}</strong> órdenes incrementales al mes. La red debería estar preparada para mover <strong>${number(totalOrdersMonth)}</strong> órdenes mensuales. Primero calculamos un <strong>promedio equivalente</strong> de drivers/día sobre el delivery total, y luego lo convertimos en un <strong>staffing sugerido</strong> aplicando colchón operativo y factor de pico.</p>
-    <p>Hoy el promedio equivalente es <strong>${number(totalDriversDailyAvg, 1)}</strong> drivers/día, mientras que el staffing sugerido sube a <strong>${number(recommendedDriversDaily, 1)}</strong> drivers/día. El pico más exigente sería <strong>${peakDaypart.label}</strong>, donde sugerimos planificar alrededor de <strong>${number(peakDaypart.requiredDrivers,1)}</strong> drivers/día equivalentes para proteger el SLA.</p>
-    <p>Si la meta es llegar a <strong>${number(target)}</strong> órdenes mensuales, todavía faltan <strong>${number(additionalNeededForTarget)}</strong> órdenes incrementales sobre la base actual. Manteniendo el mismo CTR y conversión, tendrías que exponer Tambo a <strong>${(requiredExposureForTarget * 100).toFixed(1)}%</strong> de la base activa. Eso llevaría el staffing sugerido a <strong>${number(targetRecommendedDriversDaily, 1)}</strong> drivers/día y <strong>${number(targetDriverDays,0)}</strong> driver-días/mes.</p>`;
+    <p>La base histórica hoy equivale a <strong>${number(baseDriversDailyAvg, 1)}</strong> drivers/día promedio y a <strong>${number(historicalUniqueDriversMonth)}</strong> drivers únicos activos por mes. Bajo los supuestos actuales, eso se traduce en una base sugerida de <strong>${number(baseSuggestedDriversDaily, 1)}</strong> drivers/día. Para absorber el incremental de inDrive se recomienda sumar <strong>${number(incrementalSuggestedDriversDaily, 1)}</strong> drivers/día adicionales, llevando el total sugerido a <strong>${number(recommendedDriversDaily, 1)}</strong>.</p>
+    <p>El pico más exigente sería <strong>${peakDaypart.label}</strong>, donde sugerimos planificar alrededor de <strong>${number(peakDaypart.requiredDrivers,1)}</strong> drivers/día. Si la meta incremental es <strong>${number(target)}</strong> órdenes por mes, todavía faltan <strong>${number(additionalNeededForTarget)}</strong> por capturar; manteniendo el mismo CTR y conversión, tendrías que exponer Tambo a <strong>${(requiredExposureForTarget * 100).toFixed(1)}%</strong> de la base activa. Ese escenario llevaría el staffing sugerido total a <strong>${number(targetRecommendedDriversDaily, 1)}</strong> drivers/día, es decir <strong>${number(targetAdditionalDriversDaily,1)}</strong> adicionales sobre la base histórica.</p>`;
 
   const targetNode = $('capacityTargets');
   if (targetNode) {
@@ -1130,7 +1135,7 @@ function renderSimulator(rows, summary) {
       <div class="executive-card ${capacityGap > 0 ? 'accent-red' : 'accent-lime'}">
         <span class="eyebrow-mini">Capacidad delivery</span>
         <strong>${number(installedDrivers,1)} vs ${number(recommendedDriversDaily,1)}</strong>
-        <span>${capacityGap > 0 ? `Faltan ${number(capacityGap,1)} drivers/día frente al staffing sugerido. El mayor gap se concentraría en ${worstGapDaypart.label}.` : `Hay un colchón estimado de ${number(Math.abs(capacityGap),1)} drivers/día frente al staffing sugerido.`}</span>
+        <span>${capacityGap > 0 ? `Se recomienda sumar ${number(capacityGap,1)} drivers/día adicionales sobre la base histórica. El mayor refuerzo se concentraría en ${worstGapDaypart.label}.` : `La base histórica absorbería el escenario actual sin refuerzo adicional.`}</span>
       </div>
       <div class="executive-card accent-dark">
         <span class="eyebrow-mini">Ciclo total objetivo</span>
@@ -1161,6 +1166,7 @@ function renderSimulator(rows, summary) {
           <li>Base actual delivery/mes: ${number(baseDeliveryMonth)}</li>
           <li>Incremental delivery/mes: ${number(incrementalDelivery)}</li>
           <li>Productividad asumida: ${number(ordersDriver,1)} órdenes por driver por día</li>
+          <li>Drivers únicos activos observados/mes: ${number(historicalUniqueDriversMonth)}</li>
         </ul>
       </div>
       <div class="method-card">
@@ -1171,8 +1177,9 @@ function renderSimulator(rows, summary) {
         <strong>Qué significa cada métrica</strong>
         <ul>
           <li><strong>Promedio equivalente:</strong> referencia diaria media.</li>
-          <li><strong>Drivers sugeridos/día:</strong> staffing recomendado para operar base + incremental sin deteriorar SLA.</li>
-          <li><strong>Driver-días/mes:</strong> capacidad total mensual a contratar / asegurar.</li>
+          <li><strong>Drivers sugeridos/día:</strong> staffing recomendado total para operar base + incremental sin deteriorar SLA.</li>
+          <li><strong>Drivers extra/día:</strong> refuerzo sugerido sobre la base histórica para capturar el incremental de inDrive.</li>
+          <li><strong>Driver-días/mes:</strong> capacidad total mensual a asegurar.</li>
         </ul>
       </div>`;
   }
@@ -1181,12 +1188,12 @@ function renderSimulator(rows, summary) {
     <div class="staff-card">
       <span>${s.exposure}% de exposición</span>
       <strong>${number(s.incremental)} órdenes incrementales</strong>
-      <small>${number(s.incDelivery)} delivery + ${number(s.incPickup)} retiro · total sistema ${number(s.totalMonth)} órdenes/mes · ${number(s.totalDrivers, 1)} drivers/día · ${number(s.totalDriverDays, 0)} driver-días/mes · gap ${s.gap > 0 ? '+' : ''}${number(s.gap,1)} vs capacidad instalada</small>
+      <small>${number(s.incDelivery)} delivery + ${number(s.incPickup)} retiro · total sistema ${number(s.totalMonth)} órdenes/mes · ${number(s.totalDrivers, 1)} drivers/día sugeridos · ${number(Math.max(s.totalDrivers - baseSuggestedDriversDaily,0),1)} extra sobre la base · ${number(s.totalDriverDays, 0)} driver-días/mes</small>
     </div>`).join('') + zoneCards.map((z) => `
     <div class="staff-card zone-card">
       <span>${escapeHtml(z.name)}</span>
       <strong>${number(z.incOrders)} órdenes incrementales</strong>
-      <small>${(z.share * 100).toFixed(1)}% del mix potencial · base ${number(z.baseDrivers, 1)} drivers/día · incremento ${number(z.incDrivers, 1)} · instalado ${number(z.installedZoneDrivers,1)} · gap ${z.gapDrivers > 0 ? '+' : ''}${number(z.gapDrivers, 1)}</small>
+      <small>${(z.share * 100).toFixed(1)}% del mix potencial · base ${number(z.baseDrivers, 1)} drivers/día · extra inDrive ${number(z.incDrivers, 1)} · total sugerido ${number(z.totalDrivers,1)}</small>
     </div>`).join('');
 
   const franjaNode = $('franjaPlan');
@@ -1195,7 +1202,7 @@ function renderSimulator(rows, summary) {
       <div class="franja-card">
         <strong>${escapeHtml(d.label)}</strong>
         <span class="big">${number(d.requiredDrivers,1)} drivers/día sugeridos</span>
-        <small>Base ${number(d.baseOrders,0)} órdenes/día · incremental ${number(d.incrementalOrders,0)} · total ${number(d.totalOrders,0)} · instalado ${number(d.installedDrivers,1)} · gap ${d.gapDrivers > 0 ? '+' : ''}${number(d.gapDrivers,1)}</small>
+        <small>Base ${number(d.baseOrders,0)} órdenes/día · incremental ${number(d.incrementalOrders,0)} · total ${number(d.totalOrders,0)} · base sugerida ${number(d.baseSuggestedDrivers,1)} · extra ${number(d.extraSuggestedDrivers,1)}</small>
       </div>
     `).join('');
   }
@@ -1219,7 +1226,7 @@ function renderSimulator(rows, summary) {
           : `Zona lista para escalar con preparación sugerida ≤ ${z.recPrep} min.`;
       return `<div class="capacity-alert ${tone} zone-capacity-mini">
         <strong>${escapeHtml(z.name)}</strong>
-        <span>${recommendation} Base ${number(z.baseDrivers,1)} · incremento ${number(z.incDrivers,1)} · total ${number(z.totalDrivers,1)} drivers/día · ciclo ${minutes(z.cycleP50)}.</span>
+        <span>${recommendation} Base ${number(z.baseDrivers,1)} · extra inDrive ${number(z.incDrivers,1)} · total sugerido ${number(z.totalDrivers,1)} drivers/día · ciclo ${minutes(z.cycleP50)}.</span>
       </div>`;
     }).join('');
   }
@@ -1227,10 +1234,10 @@ function renderSimulator(rows, summary) {
   createChart('capacity', 'capacityChart', {
     type: 'bar',
     data: {
-      labels: ['Base delivery', 'Incremental delivery', 'Requerido total', 'Instalado actual'],
+      labels: ['Base sugerida', 'Extra inDrive', 'Sugerido total', 'Drivers únicos/mes'],
       datasets: [{
         label: 'Drivers activos / día',
-        data: [baseDriversDailyAvg, incrementalDriversDailyAvg, recommendedDriversDaily, installedDrivers],
+        data: [baseSuggestedDriversDaily, incrementalSuggestedDriversDaily, recommendedDriversDaily, historicalUniqueDriversMonth],
         backgroundColor: ['rgba(22,93,255,.72)', 'rgba(152,193,29,.82)', 'rgba(214,31,38,.82)', 'rgba(16,28,54,.78)'],
         borderRadius: 8,
       }]
@@ -1243,9 +1250,9 @@ function renderSimulator(rows, summary) {
     data: {
       labels: daypartRows.map((d) => d.label),
       datasets: [
-        { label: 'Requerido total', data: daypartRows.map((d) => d.requiredDrivers), backgroundColor: 'rgba(22,93,255,.72)', borderRadius: 8 },
-        { label: 'Instalado', data: daypartRows.map((d) => d.installedDrivers), backgroundColor: 'rgba(16,28,54,.72)', borderRadius: 8 },
-        { type: 'line', label: 'Gap', data: daypartRows.map((d) => d.gapDrivers), borderColor: '#d61f26', backgroundColor: '#d61f26', tension: .3, yAxisID: 'y' }
+        { label: 'Base sugerida', data: daypartRows.map((d) => d.baseSuggestedDrivers), backgroundColor: 'rgba(22,93,255,.72)', borderRadius: 8 },
+        { label: 'Extra inDrive', data: daypartRows.map((d) => d.extraSuggestedDrivers), backgroundColor: 'rgba(152,193,29,.82)', borderRadius: 8 },
+        { type: 'line', label: 'Total sugerido', data: daypartRows.map((d) => d.requiredDrivers), borderColor: '#d61f26', backgroundColor: '#d61f26', tension: .3, yAxisID: 'y' }
       ]
     },
     options: baseChartOptions(),
@@ -1256,9 +1263,9 @@ function renderSimulator(rows, summary) {
     data: {
       labels: zoneCards.map((z) => trim(z.name, 18)),
       datasets: [
-        { label: 'Base', data: zoneCards.map((z) => z.baseDrivers), backgroundColor: 'rgba(22,93,255,.72)', borderRadius: 8, stack: 'drivers' },
-        { label: 'Incremental', data: zoneCards.map((z) => z.incDrivers), backgroundColor: 'rgba(152,193,29,.82)', borderRadius: 8, stack: 'drivers' },
-        { label: 'Instalado', data: zoneCards.map((z) => z.installedZoneDrivers), backgroundColor: 'rgba(16,28,54,.78)', borderRadius: 8 }
+        { label: 'Base sugerida', data: zoneCards.map((z) => z.baseDrivers), backgroundColor: 'rgba(22,93,255,.72)', borderRadius: 8, stack: 'drivers' },
+        { label: 'Extra inDrive', data: zoneCards.map((z) => z.incDrivers), backgroundColor: 'rgba(152,193,29,.82)', borderRadius: 8, stack: 'drivers' },
+        { label: 'Total sugerido', data: zoneCards.map((z) => z.totalDrivers), backgroundColor: 'rgba(16,28,54,.78)', borderRadius: 8 }
       ]
     },
     options: baseChartOptions(),
