@@ -166,11 +166,14 @@
               <div><label>Días operativos al mes</label><input id="simDays" type="number"></div>
               <div><label>Meta total de órdenes</label><input id="simTarget" type="number" value="7500"></div>
               <div><label>Drivers instalados por día</label><input id="simInstalledDrivers" type="number" step="0.1"></div>
+              <div><label>Colchón operativo (%)</label><input id="simBuffer" type="number" step="0.1"></div>
+              <div><label>Factor de pico / fricción</label><input id="simPeakFactor" type="number" step="0.05"></div>
               <div><label>% share almuerzo</label><input id="simLunchShare" type="number" step="0.1"></div>
               <div><label>% share cena</label><input id="simDinnerShare" type="number" step="0.1"></div>
             </div>
             <div id="simulatorOutput" class="sim-output"></div>
             <div id="capacityTargets" class="executive-strip"></div>
+            <div id="capacityMethodology" class="method-grid"></div>
             <div id="staffingCards" class="staffing-grid"></div>
             <div id="franjaPlan" class="staffing-grid"></div>
           </article>

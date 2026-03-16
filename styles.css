@@ -188,3 +188,25 @@ tbody tr:hover{background:#fbfdff}
 .franja-card small{display:block;margin-top:8px;font-size:12px;line-height:1.5;color:#667085}
 .zone-capacity-mini{margin-top:12px}
 .zone-capacity-mini .capacity-alert{margin-top:0}
+
+
+.method-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
+.method-card{padding:16px;border-radius:18px;background:#fff;border:1px solid var(--line);box-shadow:var(--shadow)}
+.method-card strong{display:block;font-size:14px;margin-bottom:8px;color:#101c36}
+.method-card p,.method-card li{font-size:12px;line-height:1.65;color:#667085;margin:0}
+.method-card ul{margin:8px 0 0 18px;padding:0}
+.staff-card.zone-card{background:#fff;color:#101c36;border:1px dashed rgba(16,28,54,.18);box-shadow:var(--shadow)}
+.staff-card.zone-card span,.staff-card.zone-card strong,.staff-card.zone-card small{color:#101c36;opacity:1}
+.staff-card.zone-card small{color:#667085}
+#staffingCards .staff-card:nth-child(n+4){min-height:132px}
+#franjaPlan .franja-card{background:linear-gradient(180deg,#fff 0%,#f8fbff 100%)}
+.sim-hero-grid{gap:14px}
+.sim-stat{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px}
+.sim-stat.emphasis{background:linear-gradient(135deg,#101c36,#19305d);color:#fff}
+.sim-stat.emphasis span,.sim-stat.emphasis strong,.sim-stat.emphasis small{color:#fff}
+.sim-output p{font-size:14px;line-height:1.7;color:#475467}
+.capacity-alert-list{gap:10px}
+.capacity-alert{padding:14px 16px;border-radius:16px}
+.capacity-alert strong{font-size:14px}
+.capacity-alert span{font-size:12px;line-height:1.55}
+@media (max-width: 980px){.method-grid{grid-template-columns:1fr}}
