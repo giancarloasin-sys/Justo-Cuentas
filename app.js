@@ -1134,7 +1134,7 @@ function renderSimulator(rows, summary) {
       </div>
       <div class="executive-card ${capacityGap > 0 ? 'accent-red' : 'accent-lime'}">
         <span class="eyebrow-mini">Capacidad delivery</span>
-        <strong>${number(installedDrivers,1)} vs ${number(recommendedDriversDaily,1)}</strong>
+        <strong>${number(baseSuggestedDriversDaily,1)} vs ${number(recommendedDriversDaily,1)}</strong>
         <span>${capacityGap > 0 ? `Se recomienda sumar ${number(capacityGap,1)} drivers/día adicionales sobre la base histórica. El mayor refuerzo se concentraría en ${worstGapDaypart.label}.` : `La base histórica absorbería el escenario actual sin refuerzo adicional.`}</span>
       </div>
       <div class="executive-card accent-dark">
@@ -1152,7 +1152,7 @@ function renderSimulator(rows, summary) {
     const avgDrivers = baseDriversDailyAvg + safeDivision(incDelivery, ordersDriver * days);
     const totalDrivers = avgDrivers * (1 + bufferPct) * peakFactor;
     const totalDriverDays = (baseDriverDaysMonth + safeDivision(incDelivery, ordersDriver)) * (1 + bufferPct) * peakFactor;
-    const gap = totalDrivers - installedDrivers;
+    const gap = totalDrivers - baseSuggestedDriversDaily;
     return { exposure: x, incremental: incOrders, totalMonth, incDelivery, incPickup, totalDrivers, avgDrivers, totalDriverDays, gap };
   });
 
